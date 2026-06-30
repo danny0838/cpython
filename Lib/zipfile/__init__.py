@@ -566,10 +566,10 @@ class ZipInfo:
             fmt = '<HHQQ'
 
             # Prepend a ZIP64 field to extra data
-            extra = struct.pack(
+            extra = _Extra.update(extra, struct.pack(
                 fmt, 1, struct.calcsize(fmt)-4,
                 file_size, compress_size
-            ) + _Extra.strip(extra, (1,))
+            ))
 
             file_size = 0xffffffff
             compress_size = 0xffffffff
