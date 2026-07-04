@@ -584,12 +584,9 @@ class ZipInfo:
         if encoding:
             return self.filename.encode(encoding), self.flag_bits
 
-        # For a newly added file, enforce EFS if filename or comment is non-ASCII.
-        try:
-            self.comment.decode('ascii')
-            return self.filename.encode('ascii'), self.flag_bits
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            return self.filename.encode('utf-8'), self.flag_bits | _MASK_UTF_FILENAME
+        # For a newly added file, enforce EFS for best compatibility since the
+        # entry comment may be changed in the future.
+        return self.filename.encode('utf-8'), self.flag_bits | _MASK_UTF_FILENAME
 
     def _decodeExtra(self, filename_crc):
         # Try to decode the extra field.

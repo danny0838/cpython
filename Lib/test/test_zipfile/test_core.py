@@ -1226,7 +1226,7 @@ class StoredTestZip64InSmallFiles(AbstractTestZip64InSmallFiles,
         self.assertEqual(header, b"PK\x03\x04")  # local file header
         self.assertGreaterEqual(vers, zipfile.ZIP64_VERSION)  # requires zip64 to extract
         self.assertEqual(os, 0)  # compatible with MS-DOS
-        self.assertEqual(flags, 0)  # no flags
+        self.assertEqual(f'{flags:X}', '800')  # EFS flag only
         self.assertEqual(comp, 0)  # compression method = stored
         self.assertEqual(csize, 0xFFFFFFFF)  # sizes are in zip64 extra
         self.assertEqual(usize, 0xFFFFFFFF)
@@ -1304,7 +1304,7 @@ class StoredTestZip64InSmallFiles(AbstractTestZip64InSmallFiles,
         self.assertEqual(header, b"PK\x03\x04")  # local file header
         self.assertGreaterEqual(vers, zipfile.ZIP64_VERSION)  # requires zip64 to extract
         self.assertEqual(os, 0)  # compatible with MS-DOS
-        self.assertEqual(flags, 0)  # no flags set
+        self.assertEqual(f'{flags:X}', '800')  # EFS flag only
         self.assertEqual(comp, 0)  # compression method = stored
         self.assertEqual(csize, 0xFFFFFFFF)  # sizes are in zip64 extra
         self.assertEqual(usize, 0xFFFFFFFF)
@@ -1327,7 +1327,7 @@ class StoredTestZip64InSmallFiles(AbstractTestZip64InSmallFiles,
         self.assertEqual(header, b"PK\x03\x04")  # local file header
         self.assertGreaterEqual(vers, zipfile.ZIP64_VERSION)  # requires zip64 to extract
         self.assertEqual(os, 0)  # compatible with MS-DOS
-        self.assertEqual("{:b}".format(flags), "1000")  # streaming flag set
+        self.assertEqual(f'{flags:X}', '808')  # EFS and DD flags set
         self.assertEqual(comp, 0)  # compression method = stored
         self.assertEqual(csize, 0xFFFFFFFF)  # sizes are in zip64 extra
         self.assertEqual(usize, 0xFFFFFFFF)
@@ -1440,7 +1440,13 @@ _ZINFO_PUBLIC_KEYS = [k for k in zipfile.ZipInfo.__slots__ if not k.startswith('
 
 def comparable_zinfo(zinfo):
     """Return a dict of public ZipInfo attributes for assertEqual comparison."""
-    return {k: getattr(zinfo, k) for k in _ZINFO_PUBLIC_KEYS}
+    attrs = {k: getattr(zinfo, k) for k in _ZINFO_PUBLIC_KEYS}
+
+    # The _MASK_UTF_FILENAME (0x800) flag bit could be enforced even if the original
+    # ZipInfo hasn't set it. Skip checking this bit by pretending it's always set.
+    attrs['flag_bits'] |= 0x800
+
+    return attrs
 
 _struct_pack = struct.pack
 
@@ -5820,13 +5826,12 @@ class EncodedMetadataTests(unittest.TestCase):
         with zipfile.ZipFile(TESTFN, "r") as zipfp:
             self._test_read(zipfp, names, contents, comments, efs_flags)
 
-    def test_write_enforce_efs_on_demand(self):
-        """New files should enforce EFS flag if filename or comment is not ASCII,
-        regardless of mode or metadata_encoding."""
+    def test_write_enforce_efs(self):
+        """New files should enforce EFS flag regardless of mode or metadata_encoding."""
         names = ['\u4e00', '\u4e8c', 'file3', 'file4']
         contents = [b'content1', b'content2', b'content3', b'content4']
         comments = ['\u4e00'.encode('utf-8'), b'foo', '\u4e8c'.encode('utf-8'), b'bar']
-        expected_efs_flags = [True, True, True, False]
+        expected_efs_flags = [True, True, True, True]
 
         def sub_test():
             with zipfile.ZipFile(TESTFN, mode=mode,
