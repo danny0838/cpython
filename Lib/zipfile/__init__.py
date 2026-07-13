@@ -2194,6 +2194,21 @@ class ZipFile:
         self._comment = comment
         self._didModify = True
 
+    @property
+    def comment_text(self):
+        try:
+            return self._comment.decode('utf-8')
+        except UnicodeDecodeError:
+            return self._comment.decode(self.metadata_encoding or 'cp437')
+
+    @comment_text.setter
+    def comment_text(self, comment):
+        try:
+            comment_bytes = comment.encode(self.metadata_encoding or 'cp437')
+        except UnicodeEncodeError:
+            comment_bytes = comment.encode('utf-8')
+        self.comment = comment_bytes
+
     def read(self, name, pwd=None):
         """Return file bytes for name. 'pwd' is the password to decrypt
         encrypted files."""

@@ -4489,6 +4489,37 @@ class OtherTests(unittest.TestCase):
         with zipfile.ZipFile(TESTFN, "r") as zipf:
             self.assertEqual(zipf.comment, b"this is a comment")
 
+    def test_comment_text(self):
+        # cp437
+        orig_prop = zipfile.ZipFile.comment
+        m_setter = mock.Mock(wraps=orig_prop.fset)
+        with zipfile.ZipFile(TESTFN, "w") as zipf:
+            with mock.patch('zipfile.ZipFile.comment', property(orig_prop.fget, m_setter)):
+                zipf.comment_text = 'fünf'
+            m_setter.assert_called_once_with(zipf, 'fünf'.encode('cp437'))
+            self.assertEqual(zipf.comment, 'fünf'.encode('cp437'))
+            self.assertEqual(zipf.comment_text, 'fünf')
+
+        # shift_jis
+        orig_prop = zipfile.ZipFile.comment
+        m_setter = mock.Mock(wraps=orig_prop.fset)
+        with zipfile.ZipFile(TESTFN, "w", metadata_encoding='shift_jis') as zipf:
+            with mock.patch('zipfile.ZipFile.comment', property(orig_prop.fget, m_setter)):
+                zipf.comment_text = '\u4e00'
+            m_setter.assert_called_once_with(zipf, '\u4e00'.encode('shift_jis'))
+            self.assertEqual(zipf.comment, '\u4e00'.encode('shift_jis'))
+            self.assertEqual(zipf.comment_text, '\u4e00')
+
+        # utf-8
+        orig_prop = zipfile.ZipFile.comment
+        m_setter = mock.Mock(wraps=orig_prop.fset)
+        with zipfile.ZipFile(TESTFN, "w") as zipf:
+            with mock.patch('zipfile.ZipFile.comment', property(orig_prop.fget, m_setter)):
+                zipf.comment_text = '\u4e00'
+            m_setter.assert_called_once_with(zipf, '\u4e00'.encode('utf-8'))
+            self.assertEqual(zipf.comment, '\u4e00'.encode('utf-8'))
+            self.assertEqual(zipf.comment_text, '\u4e00')
+
     def test_empty_zipfile(self):
         # Check that creating a file in 'w' or 'a' mode and closing without
         # adding any files to the archives creates a valid empty ZIP file
