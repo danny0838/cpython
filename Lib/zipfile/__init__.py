@@ -520,6 +520,54 @@ class ZipInfo:
     def orig_filename(self, value):
         self._orig_filename = value
 
+    @property
+    def comment_text(self):
+        if self.flag_bits & _MASK_UTF_FILENAME:
+            return self.comment.decode('utf-8')
+
+        comment = None
+        comment_crc = crc32(self.comment)
+        for extra, tp in _Extra.iter(self.extra, True):
+            if tp == 0x6375:
+                # Unicode Comment Extra Field
+                try:
+                    uc_version, uc_crc = struct.unpack_from('<BL', extra, 4)
+                    if uc_version == 1 and uc_crc == comment_crc:
+                        comment = extra[9:].decode('utf-8')
+                except struct.error as e:
+                    raise BadZipFile("Corrupt unicode comment extra field (0x6375)") from e
+                except UnicodeDecodeError as e:
+                    raise BadZipFile('Corrupt unicode comment extra field (0x6375): invalid utf-8 bytes') from e
+        if comment:
+            return comment
+
+        return self.comment.decode(self._metadata_encoding or 'utf-8')
+
+    @comment_text.setter
+    def comment_text(self, comment):
+        if (self.flag_bits & _MASK_UTF_FILENAME) or self._metadata_encoding is None:
+            self.comment = comment.encode('utf-8')
+            self.extra = _Extra.strip(self.extra, (0x6375,))
+            return
+
+        self.comment = comment.encode(self._metadata_encoding, errors='ignore')
+
+        try:
+            comment.encode('ascii')
+        except UnicodeEncodeError:
+            # Add Unicode Comment Extra Field when the comment is non-ASCII
+            comment_utf = comment.encode('utf-8')
+            utf_len = len(comment_utf)
+            data_size = 1 + 4 + utf_len
+            comment_crc = crc32(self.comment)
+            self.extra = _Extra.update(self.extra, struct.pack(
+                f'<HHBI{utf_len}s',
+                0x6375, data_size, 1, comment_crc, comment_utf
+            ))
+        else:
+            # Remove Unicode Comment Extra Field
+            self.extra = _Extra.strip(self.extra, (0x6375,))
+
     # Maintain backward compatibility with the old protected attribute name.
     @property
     def _compresslevel(self):

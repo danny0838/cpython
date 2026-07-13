@@ -4520,6 +4520,147 @@ class OtherTests(unittest.TestCase):
             self.assertEqual(zipf.comment, '\u4e00'.encode('utf-8'))
             self.assertEqual(zipf.comment_text, '\u4e00')
 
+    def test_zipinfo_comment_text_newfile(self):
+        # ASCII
+        with zipfile.ZipFile(TESTFN, "w") as zipf:
+            zi = zipfile.ZipInfo('file')
+            zi.comment_text = 'abc'
+            zipf.writestr(zi, 'foo')
+
+        with zipfile.ZipFile(TESTFN, "r") as zipf:
+            zi = zipf.infolist()[0]
+            self.assertEqual(zi.comment, b'abc')
+            self.assertEqual(zi.comment_text, 'abc')
+            self.assertFalse(bool(zi.flag_bits & zipfile._MASK_UTF_FILENAME))
+            self.assertEqual(zi.extra, b'')
+
+        # UTF-8
+        with zipfile.ZipFile(TESTFN, "w") as zipf:
+            zi = zipfile.ZipInfo('file')
+            zi.comment_text = 'fünf'  # representable in cp437
+            zipf.writestr(zi, 'foo')
+
+        with zipfile.ZipFile(TESTFN, "r") as zipf:
+            zi = zipf.infolist()[0]
+            self.assertEqual(zi.comment, 'fünf'.encode('utf-8'))
+            self.assertEqual(zi.comment_text, 'fünf')
+            self.assertTrue(bool(zi.flag_bits & zipfile._MASK_UTF_FILENAME))
+            self.assertEqual(zi.extra, b'')
+
+    def test_zipinfo_comment_text_oldfile_efs(self):
+        # EFS by filename
+        with zipfile.ZipFile(TESTFN, "w") as zipf:
+            zipf.writestr('\u4e00', 'foo')
+
+        with zipfile.ZipFile(TESTFN, "a") as zipf:
+            zi = zipf.infolist()[0]
+            self.assertTrue(bool(zi.flag_bits & zipfile._MASK_UTF_FILENAME))
+            zi.comment_text = '\u4e00'
+            # trigger archive rewriting
+            zipf.comment = zipf.comment
+
+        with zipfile.ZipFile(TESTFN, "r") as zipf:
+            zi = zipf.infolist()[0]
+            self.assertEqual(zi.comment, '\u4e00'.encode('utf-8'))
+            self.assertEqual(zi.comment_text, '\u4e00')
+            self.assertTrue(bool(zi.flag_bits & zipfile._MASK_UTF_FILENAME))
+            self.assertEqual(zi.extra, b'')
+
+        # EFS by comment
+        with zipfile.ZipFile(TESTFN, "w") as zipf:
+            zi = zipfile.ZipInfo('file')
+            zi.comment = 'fünf'.encode('utf-8')
+            zipf.writestr(zi, 'foo')
+
+        with zipfile.ZipFile(TESTFN, "a") as zipf:
+            zi = zipf.infolist()[0]
+            self.assertTrue(bool(zi.flag_bits & zipfile._MASK_UTF_FILENAME))
+            zi.comment_text = '\u4e00'
+            # trigger archive rewriting
+            zipf.comment = zipf.comment
+
+        with zipfile.ZipFile(TESTFN, "r") as zipf:
+            zi = zipf.infolist()[0]
+            self.assertEqual(zi.comment, '\u4e00'.encode('utf-8'))
+            self.assertEqual(zi.comment_text, '\u4e00')
+            self.assertTrue(bool(zi.flag_bits & zipfile._MASK_UTF_FILENAME))
+            self.assertEqual(zi.extra, b'')
+
+    def test_zipinfo_comment_text_oldfile_no_efs(self):
+        # ASCII
+        with zipfile.ZipFile(TESTFN, "w") as zipf:
+            zipf.writestr('file', 'foo')
+
+        with zipfile.ZipFile(TESTFN, "a") as zipf:
+            zi = zipf.infolist()[0]
+            zi.comment_text = 'foo'
+            # trigger archive rewriting
+            zipf.comment = zipf.comment
+
+        with zipfile.ZipFile(TESTFN, "r") as zipf:
+            zi = zipf.infolist()[0]
+            self.assertEqual(zi.comment, b'foo')
+            self.assertEqual(zi.comment_text, 'foo')
+            self.assertFalse(bool(zi.flag_bits & zipfile._MASK_UTF_FILENAME))
+            self.assertEqual(zi.extra, b'')
+
+        # cp437
+        with zipfile.ZipFile(TESTFN, "w") as zipf:
+            zipf.writestr('file', 'foo')
+
+        with zipfile.ZipFile(TESTFN, "a") as zipf:
+            zi = zipf.infolist()[0]
+            zi.comment_text = 'fünf'
+            # trigger archive rewriting
+            zipf.comment = zipf.comment
+
+        with zipfile.ZipFile(TESTFN, "r") as zipf:
+            zi = zipf.infolist()[0]
+            self.assertEqual(zi.comment, 'fünf'.encode('cp437'))
+            self.assertEqual(zi.comment_text, 'fünf')
+            self.assertFalse(bool(zi.flag_bits & zipfile._MASK_UTF_FILENAME))
+            self.assertEqual(struct.unpack('<HHBI5s', zi.extra), (
+                0x6375, 10, 1, zipfile.crc32(zi.comment), 'fünf'.encode('utf-8'),
+            ))
+
+        # cp437 non-encodable
+        with zipfile.ZipFile(TESTFN, "w") as zipf:
+            zipf.writestr('file', 'foo')
+
+        with zipfile.ZipFile(TESTFN, "a") as zipf:
+            zi = zipf.infolist()[0]
+            zi.comment_text = '1\u4e002'
+            # trigger archive rewriting
+            zipf.comment = zipf.comment
+
+        with zipfile.ZipFile(TESTFN, "r") as zipf:
+            zi = zipf.infolist()[0]
+            self.assertEqual(zi.comment, b'12')
+            self.assertEqual(zi.comment_text, '1\u4e002')
+            self.assertFalse(bool(zi.flag_bits & zipfile._MASK_UTF_FILENAME))
+            self.assertEqual(struct.unpack('<HHBI5s', zi.extra), (
+                0x6375, 10, 1, zipfile.crc32(zi.comment), '1\u4e002'.encode('utf-8'),
+            ))
+
+        # shift_jis
+        with zipfile.ZipFile(TESTFN, "w") as zipf:
+            zipf.writestr('file', 'foo')
+
+        with zipfile.ZipFile(TESTFN, "a", metadata_encoding='shift_jis') as zipf:
+            zi = zipf.infolist()[0]
+            zi.comment_text = '1\u4e002'
+            # trigger archive rewriting
+            zipf.comment = zipf.comment
+
+        with zipfile.ZipFile(TESTFN, "r") as zipf:
+            zi = zipf.infolist()[0]
+            self.assertEqual(zi.comment, '1\u4e002'.encode('shift_jis'))
+            self.assertEqual(zi.comment_text, '1\u4e002')
+            self.assertFalse(bool(zi.flag_bits & zipfile._MASK_UTF_FILENAME))
+            self.assertEqual(struct.unpack('<HHBI5s', zi.extra), (
+                0x6375, 10, 1, zipfile.crc32(zi.comment), '1\u4e002'.encode('utf-8'),
+            ))
+
     def test_empty_zipfile(self):
         # Check that creating a file in 'w' or 'a' mode and closing without
         # adding any files to the archives creates a valid empty ZIP file
