@@ -569,7 +569,7 @@ class ZipInfo:
             compress_size = self.compress_size
             file_size = self.file_size
 
-        extra = self.extra
+        extra = self._get_local_extra()
 
         min_version = 0
         if zip64 is None:
@@ -578,8 +578,11 @@ class ZipInfo:
             zip64 = file_size > ZIP64_LIMIT or compress_size > ZIP64_LIMIT
         if zip64:
             fmt = '<HHQQ'
-            extra = extra + struct.pack(fmt,
-                                        1, struct.calcsize(fmt)-4, file_size, compress_size)
+            extra = struct.pack(
+                fmt, 1, struct.calcsize(fmt)-4,
+                file_size, compress_size
+            ) + extra
+
             file_size = 0xffffffff
             compress_size = 0xffffffff
             min_version = ZIP64_VERSION
@@ -654,6 +657,14 @@ class ZipInfo:
                     raise BadZipFile("Corrupt unicode path extra field (0x7075)") from e
                 except UnicodeDecodeError as e:
                     raise BadZipFile('Corrupt unicode path extra field (0x7075): invalid utf-8 bytes') from e
+
+    def _get_local_extra(self):
+        return _Extra.strip(self.extra, (
+            # should be added on demand later
+            0x0001,  # Zip64
+            # should only exist in central directory
+            0x6375,  # Unicode Comment
+        ))
 
     @classmethod
     def from_file(cls, filename, arcname=None, *, strict_timestamps=True):
